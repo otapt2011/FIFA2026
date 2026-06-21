@@ -401,7 +401,7 @@ statusBadge: (status, isLive = false) => {
     homeEvents.forEach(e => {
       let minute = e.eventMinute;
       if (e.eventMinuteExtra > 0) minute += `+${e.eventMinuteExtra}`;
-      htmlStr += `<div class="flex items-center justify-end gap-1 py-0.5 text-xs group"><span class="font-mono text-white/50">${minute}'</span> <span>${iconMap[e.eventType] || e.eventType}</span> <span class="truncate text-white/80">${escapeHtml(e.playerName)}</span> <button class="delete-event-btn text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity text-xs" data-event-id="${e.id}"><i class="fas fa-trash-alt"></i></button></div>`;
+      htmlStr += `<div class="flex items-center justify-end gap-1 py-0.5 text-xs group overflow-y-auto"><span class="font-mono text-white/50">${minute}'</span> <span>${iconMap[e.eventType] || e.eventType}</span> <span class="truncate text-white/80">${escapeHtml(e.playerName)}</span> <button class="delete-event-btn text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity text-xs" data-event-id="${e.id}"><i class="fas fa-trash-alt"></i></button></div>`;
     });
     htmlStr += `</div><div class="pl-3"><div class="text-xs font-semibold text-indigo-400 mb-2 text-center">${escapeHtml(match.awayTeam)} (Away)</div>`;
     awayEvents.forEach(e => {
