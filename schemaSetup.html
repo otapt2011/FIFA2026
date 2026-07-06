@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FIFA DB Installer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body { background: #0f0f11; font-size: 13px; }
+    #progressLog, #importLog { max-height: 30vh; overflow-y: auto; font-family: monospace; font-size: 12px; }
+    .log-entry { padding: 2px 6px; border-bottom: 1px solid #1e1e22; }
+    .log-entry.success { border-left: 3px solid #22c55e; }
+    .log-entry.error { border-left: 3px solid #ef4444; }
+    .log-entry.pending { border-left: 3px solid #eab308; }
+    .log-entry .status-icon { width: 16px; display: inline-block; }
+    .progress-bar { transition: width 0.2s ease; }
+    .tab-btn { padding: 4px 12px; border-bottom: 2px solid transparent; font-size: 12px; transition: 0.15s; }
+    .tab-btn.active { border-bottom-color: #6366f1; color: #fff; }
+    .tab-btn:not(.active) { color: #8b8fa7; }
+    .tab-btn:hover { color: #d1d5db; }
+    #dataPreview { max-height: 25vh; overflow-y: auto; }
+    .table-count { background: #1e293b; padding: 1px 8px; border-radius: 10px; font-size: 11px; }
+    footer { border-top: 1px solid #1e1e22; padding: 4px 8px; }
+    input[type="file"] { font-size: 12px; }
+    .btn { padding: 2px 10px; font-size: 12px; border-radius: 4px; }
+  </style>
+</head>
+<body class="text-gray-300 flex flex-col min-h-screen">
+
+  <!-- ===== HEADER ===== -->
+  <header class="bg-gray-900 border-b border-gray-700 px-3 py-1.5 flex flex-wrap items-center justify-between gap-1 text-xs">
+    <div class="flex items-center gap-2">
+      <i class="fas fa-database text-indigo-400 text-sm"></i>
+      <span class="font-bold text-indigo-300">FIFA Installer</span>
+      <span class="text-gray-500">|</span>
+      <span class="font-mono text-indigo-200/80">fifawc</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="connectionStatus" class="flex items-center gap-1.5">
+        <i class="fas fa-circle text-gray-500 text-[10px]"></i>
+        <span class="text-gray-400">Not connected</span>
+      </span>
+    </div>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <main class="flex-1 px-3 py-2 flex flex-col overflow-hidden">
+
+    <!-- Tabs -->
+    <div class="flex border-b border-gray-700 mb-1.5">
+      <button id="tabSchema" class="tab-btn active">Schema Setup</button>
+      <button id="tabImport" class="tab-btn">Data Import</button>
+    </div>
+
+    <!-- Schema Tab -->
+    <div id="schemaTab" class="flex flex-col flex-1 min-h-0">
+      <div class="bg-gray-800/80 rounded border border-gray-700 p-1.5 mb-1.5 flex flex-wrap items-center gap-1 text-xs">
+        <input type="file" id="schemaFile" accept=".sql" class="flex-1 min-w-[120px] text-gray-300 file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-indigo-600 file:text-white hover:file:bg-indigo-700">
+        <span id="schemaFileStatus" class="text-gray-400 truncate max-w-[200px]">No file selected</span>
+        <div class="flex items-center gap-2 ml-auto">
+          <span id="schemaProgressText" class="text-gray-400">0 / 0</span>
+          <div class="w-24 bg-gray-700 rounded-full h-1.5 overflow-hidden">
+            <div id="schemaProgressBar" class="bg-indigo-500 h-1.5 progress-bar" style="width:0%"></div>
+          </div>
+          <button id="runBtn" disabled class="btn bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white transition">
+            <i class="fas fa-play mr-1"></i> Run
+          </button>
+        </div>
+      </div>
+      <div id="progressLog" class="bg-gray-900 rounded border border-gray-700 p-1 flex-1 min-h-0">
+        <div class="text-gray-500 text-center py-4 text-xs">Select a schema.sql file and click Run.</div>
+      </div>
+    </div>
+
+    <!-- Import Tab -->
+    <div id="importTab" class="hidden flex flex-col flex-1 min-h-0">
+      <div class="bg-gray-800/80 rounded border border-gray-700 p-1.5 mb-1.5 flex flex-wrap items-center gap-1 text-xs">
+        <input type="file" id="importFile" accept=".json" class="flex-1 min-w-[120px] text-gray-300 file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-indigo-600 file:text-white hover:file:bg-indigo-700">
+        <button id="importBtn" disabled class="btn bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white transition whitespace-nowrap">
+          <i class="fas fa-upload mr-1"></i> Import
+        </button>
+        <span id="importStatus" class="text-gray-400 truncate max-w-[160px]"></span>
+      </div>
+      <div id="dataPreview" class="hidden bg-gray-900/80 rounded border border-gray-700 p-1.5 mb-1.5 text-xs">
+        <div id="previewContent"></div>
+      </div>
+      <div id="importLog" class="hidden bg-gray-900 rounded border border-gray-700 p-1 flex-1 min-h-0">
+        <div class="text-gray-500 text-center py-3 text-xs">Ready</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="text-gray-500 text-[10px] flex justify-between px-3 py-0.5 border-t border-gray-700">
+    <span>v2.0</span>
+    <span><i class="far fa-clock mr-1"></i><span id="footerTime"></span></span>
+  </footer>
+
+  <!-- ===== LOGIN MODAL ===== -->
+  <div id="loginModal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 bg-black/70 backdrop-blur-sm">
+    <div class="bg-gray-900 border border-white/10 rounded-xl max-w-xs w-full p-4">
+      <h3 class="text-base font-bold text-white mb-1">
+        <i class="fas fa-lock mr-2"></i>Password
+      </h3>
+      <p class="text-xs text-white/50 mb-3">Enter the server password.</p>
+      <input id="loginPasswordInput" type="password" placeholder="Password" class="w-full bg-gray-800 border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 mb-3">
+      <div class="flex justify-end gap-2">
+        <button id="loginCancelBtn" class="text-xs text-white/50 hover:text-white transition px-3 py-1">Cancel</button>
+        <button id="loginSubmitBtn" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1 rounded transition">Login</button>
+      </div>
+      <p id="loginError" class="text-red-400 text-xs mt-2 hidden"></p>
+    </div>
+  </div>
+
+  <!-- ===== EXTERNAL SCRIPT ===== -->
+  <script src="./jaferRemoteSQL.js"></script>
+
+  <script>
+    (function() {
+      'use strict';
+
+      // ---------- CONFIG ----------
+      const BASE_URL = 'https://turso-db-server.vercel.app';
+      const DB_NAME = 'fifawc';
+      const SCHEMA_DELAY_MS = 300;
+
+      // ---------- DOM refs ----------
+      const loginModal = document.getElementById('loginModal');
+      const loginInput = document.getElementById('loginPasswordInput');
+      const loginSubmit = document.getElementById('loginSubmitBtn');
+      const loginCancel = document.getElementById('loginCancelBtn');
+      const loginError = document.getElementById('loginError');
+      const connectionStatus = document.getElementById('connectionStatus');
+      const schemaProgressText = document.getElementById('schemaProgressText');
+      const schemaProgressBar = document.getElementById('schemaProgressBar');
+      const runBtn = document.getElementById('runBtn');
+      const progressLog = document.getElementById('progressLog');
+      const schemaFile = document.getElementById('schemaFile');
+      const schemaFileStatus = document.getElementById('schemaFileStatus');
+
+      const importFile = document.getElementById('importFile');
+      const importBtn = document.getElementById('importBtn');
+      const importStatus = document.getElementById('importStatus');
+      const dataPreview = document.getElementById('dataPreview');
+      const previewContent = document.getElementById('previewContent');
+      const importLog = document.getElementById('importLog');
+
+      const tabSchema = document.getElementById('tabSchema');
+      const tabImport = document.getElementById('tabImport');
+      const schemaTab = document.getElementById('schemaTab');
+      const importTab = document.getElementById('importTab');
+
+      let db = null;
+      let isRunning = false;
+      let parsedJson = null;
+      let schemaSql = null;
+
+      // ---------- Tabs ----------
+      function switchTab(tab) {
+        [tabSchema, tabImport].forEach(b => b.classList.remove('active'));
+        schemaTab.classList.add('hidden');
+        importTab.classList.add('hidden');
+        if (tab === 'schema') {
+          tabSchema.classList.add('active');
+          schemaTab.classList.remove('hidden');
+        } else {
+          tabImport.classList.add('active');
+          importTab.classList.remove('hidden');
+        }
+      }
+      tabSchema.addEventListener('click', () => switchTab('schema'));
+      tabImport.addEventListener('click', () => switchTab('import'));
+
+      // ---------- Login ----------
+      function showLoginModal() {
+        return new Promise((resolve, reject) => {
+          loginModal.classList.remove('hidden');
+          loginInput.value = '';
+          loginError.classList.add('hidden');
+          loginInput.disabled = false;
+          loginSubmit.disabled = false;
+          loginSubmit.innerHTML = 'Login';
+          loginInput.focus();
+
+          const cleanup = () => {
+            loginModal.classList.add('hidden');
+            loginSubmit.onclick = null;
+            loginCancel.onclick = null;
+            loginInput.removeEventListener('keydown', handleKey);
+          };
+
+          const handleKey = (e) => { if (e.key === 'Enter') handleSubmit(); };
+          loginInput.addEventListener('keydown', handleKey);
+
+          const handleSubmit = async () => {
+            const password = loginInput.value.trim();
+            if (!password) {
+              loginError.textContent = 'Please enter a password.';
+              loginError.classList.remove('hidden');
+              return;
+            }
+            loginInput.disabled = true;
+            loginSubmit.disabled = true;
+            loginSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            loginError.classList.add('hidden');
+
+            try {
+              const resp = await fetch(`${BASE_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+              });
+              const data = await resp.json();
+              if (!resp.ok) {
+                loginError.textContent = data.error || 'Incorrect password.';
+                loginError.classList.remove('hidden');
+                loginInput.disabled = false;
+                loginSubmit.disabled = false;
+                loginSubmit.innerHTML = 'Login';
+                loginInput.focus();
+                return;
+              }
+              localStorage.setItem('fifa_auth_token', data.token);
+              cleanup();
+              resolve(data.token);
+            } catch (err) {
+              loginError.textContent = 'Network error.';
+              loginError.classList.remove('hidden');
+              loginInput.disabled = false;
+              loginSubmit.disabled = false;
+              loginSubmit.innerHTML = 'Login';
+              loginInput.focus();
+            }
+          };
+
+          loginSubmit.onclick = handleSubmit;
+          loginCancel.onclick = () => { cleanup(); resolve(null); };
+        });
+      }
+
+      async function login() {
+        const stored = localStorage.getItem('fifa_auth_token');
+        if (stored) return stored;
+        const token = await showLoginModal();
+        if (!token) throw new Error('Login cancelled.');
+        localStorage.setItem('fifa_auth_token', token);
+        return token;
+      }
+
+      // ---------- Connect ----------
+      async function connectDB() {
+        try {
+          const token = await login();
+          JaferRemoteSQL.configure({ writeEndpoint: '/exec', apiKey: token });
+          db = await JaferRemoteSQL.jaferInit(BASE_URL, DB_NAME);
+          const test = await db.jaferGet('SELECT 1 AS ok');
+          if (!test || Number(test.ok) !== 1) throw new Error('Connection test failed');
+          connectionStatus.innerHTML = `<i class="fas fa-circle text-green-400 text-[10px]"></i> Connected to ${DB_NAME}`;
+          runBtn.disabled = !schemaSql;
+          importBtn.disabled = false;
+          return true;
+        } catch (err) {
+          connectionStatus.innerHTML = `<i class="fas fa-circle text-red-400 text-[10px]"></i> Error: ${err.message}`;
+          throw err;
+        }
+      }
+
+      // ---------- Schema file handling ----------
+      schemaFile.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) {
+          schemaSql = null;
+          schemaFileStatus.textContent = 'No file selected';
+          runBtn.disabled = true;
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+          schemaSql = ev.target.result;
+          schemaFileStatus.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+          runBtn.disabled = !db || !schemaSql;
+          progressLog.innerHTML = `<div class="text-gray-500 text-center py-4 text-xs">Schema loaded. Click Run to execute.</div>`;
+        };
+        reader.onerror = function() {
+          schemaSql = null;
+          schemaFileStatus.textContent = 'Error reading file';
+          runBtn.disabled = true;
+        };
+        reader.readAsText(file);
+      });
+
+      // ---------- Parse statements ----------
+      function parseStatements(sql) {
+        return sql.split(/;\s*\n/).filter(s => s.trim().length > 0).map(s => s.trim() + ';');
+      }
+
+      // ---------- Run schema ----------
+      async function runSchema() {
+        if (isRunning || !db || !schemaSql) return;
+        isRunning = true;
+        runBtn.disabled = true;
+        runBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>';
+
+        const statements = parseStatements(schemaSql);
+        const total = statements.length;
+        let current = 0, success = 0, errors = 0;
+
+        progressLog.innerHTML = '';
+
+        function updateProgress() {
+          const pct = total > 0 ? (current / total * 100) : 0;
+          schemaProgressText.textContent = `${current} / ${total}`;
+          schemaProgressBar.style.width = pct + '%';
+        }
+
+        function logEntry(index, statement, status, message) {
+          const div = document.createElement('div');
+          div.className = `log-entry ${status}`;
+          let iconHtml;
+          if (status === 'success') iconHtml = '<i class="fas fa-check text-green-400"></i>';
+          else if (status === 'error') iconHtml = '<i class="fas fa-times text-red-400"></i>';
+          else iconHtml = '<i class="fas fa-hourglass-half text-yellow-400"></i>';
+          const statusText = status === 'success' ? 'OK' : status === 'error' ? 'ERR' : '...';
+          const snippet = statement.length > 60 ? statement.slice(0, 60) + '…' : statement;
+          div.innerHTML = `
+            <span class="status-icon">${iconHtml}</span>
+            <span class="step-indicator text-gray-500">[${index+1}/${total}]</span>
+            <span class="text-gray-300">${snippet}</span>
+            <span class="text-xs ml-1 ${status === 'success' ? 'text-green-400' : status === 'error' ? 'text-red-400' : 'text-yellow-400'}">${statusText}</span>
+            ${message ? `<span class="text-xs text-gray-500 ml-1">${message}</span>` : ''}
+          `;
+          progressLog.appendChild(div);
+          progressLog.scrollTop = progressLog.scrollHeight;
+        }
+
+        for (let i = 0; i < total; i++) {
+          const stmt = statements[i];
+          current = i + 1;
+          updateProgress();
+          logEntry(i, stmt, 'pending');
+
+          try {
+            await db.jaferExec(stmt);
+            const last = progressLog.lastChild;
+            if (last) {
+              last.className = 'log-entry success';
+              last.innerHTML = last.innerHTML.replace('fa-hourglass-half text-yellow-400', 'fa-check text-green-400').replace('...', 'OK');
+            }
+            success++;
+          } catch (err) {
+            const msg = err.message || 'Unknown error';
+            const last = progressLog.lastChild;
+            if (last) {
+              last.className = 'log-entry error';
+              last.innerHTML = last.innerHTML.replace('fa-hourglass-half text-yellow-400', 'fa-times text-red-400').replace('...', 'ERR');
+              const span = document.createElement('span');
+              span.className = 'text-xs text-red-400 ml-1';
+              span.textContent = msg;
+              last.appendChild(span);
+            }
+            errors++;
+          }
+          if (i < total - 1) await new Promise(r => setTimeout(r, SCHEMA_DELAY_MS));
+        }
+
+        updateProgress();
+        runBtn.innerHTML = '<i class="fas fa-check mr-1"></i> Done';
+        runBtn.disabled = false;
+        isRunning = false;
+        connectionStatus.innerHTML = `<i class="fas fa-circle ${errors === 0 ? 'text-green-400' : 'text-yellow-400'} text-[10px]"></i> Done: ${success} OK, ${errors} ERR`;
+      }
+
+      // ---------- Data Import (unchanged) ----------
+      function escapeSqlString(val) {
+        if (val === null || val === undefined) return 'NULL';
+        if (typeof val === 'string') return "'" + val.replace(/'/g, "''") + "'";
+        if (typeof val === 'number') return Number.isFinite(val) ? String(val) : 'NULL';
+        if (typeof val === 'boolean') return val ? '1' : '0';
+        return 'NULL';
+      }
+
+      async function importData() {
+        if (!db || !parsedJson) {
+          importStatus.textContent = 'Select a JSON file first.';
+          return;
+        }
+
+        const tables = parsedJson.tables;
+        const insertOrder = parsedJson.insertOrder || [
+          'tournaments', 'stages', 'cities', 'stadiums', 'groups', 'teams',
+          'matches', 'bracket_rules', 'match_scores', 'match_events'
+        ];
+
+        importLog.classList.remove('hidden');
+        importLog.innerHTML = '';
+        importBtn.disabled = true;
+        importBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>';
+        importStatus.textContent = 'Importing...';
+
+        let successRows = 0, errorRows = 0;
+
+        function logEntry(message, isError = false) {
+          const div = document.createElement('div');
+          div.className = `log-entry ${isError ? 'error' : 'success'}`;
+          const icon = isError ? '<i class="fas fa-times text-red-400"></i>' : '<i class="fas fa-check text-green-400"></i>';
+          div.innerHTML = `<span class="status-icon">${icon}</span> ${message}`;
+          importLog.appendChild(div);
+          importLog.scrollTop = importLog.scrollHeight;
+        }
+
+        try {
+          await db.jaferExec('PRAGMA foreign_keys = OFF;');
+
+          for (const table of insertOrder) {
+            const rows = tables[table] || [];
+            if (!rows.length) {
+              logEntry(`Table ${table}: no rows`);
+              continue;
+            }
+            const cols = Object.keys(rows[0]);
+            logEntry(`Table ${table}: ${rows.length} rows`);
+
+            const batchSize = 50;
+            for (let i = 0; i < rows.length; i += batchSize) {
+              const batch = rows.slice(i, i + batchSize);
+              try {
+                const values = batch.map(row => `(${cols.map(c => escapeSqlString(row[c])).join(', ')})`).join(', ');
+                await db.jaferExec(`INSERT INTO ${table} (${cols.join(', ')}) VALUES ${values};`);
+                successRows += batch.length;
+              } catch (err) {
+                errorRows += batch.length;
+                logEntry(`  Batch failed: ${err.message}`, true);
+              }
+            }
+          }
+
+          await db.jaferExec('PRAGMA foreign_keys = ON;');
+
+          const msg = `Done: ${successRows} inserted, ${errorRows} errors.`;
+          if (errorRows === 0) {
+            importStatus.innerHTML = `<span class="text-green-400"><i class="fas fa-check"></i> ${msg}</span>`;
+          } else {
+            importStatus.innerHTML = `<span class="text-yellow-400"><i class="fas fa-exclamation-triangle"></i> ${msg}</span>`;
+          }
+        } catch (err) {
+          importStatus.innerHTML = `<span class="text-red-400"><i class="fas fa-times"></i> Import failed: ${err.message}</span>`;
+          logEntry(`Import failed: ${err.message}`, true);
+        } finally {
+          importBtn.disabled = false;
+          importBtn.innerHTML = '<i class="fas fa-upload mr-1"></i> Import';
+        }
+      }
+
+      // ---------- File handling for data import ----------
+      importFile.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+          try {
+            const json = JSON.parse(ev.target.result);
+            parsedJson = json;
+            dataPreview.classList.remove('hidden');
+            let html = '<div class="flex flex-wrap gap-1">';
+            const tables = json.tables || {};
+            const order = json.insertOrder || Object.keys(tables);
+            for (const t of order) {
+              const rows = tables[t] || [];
+              html += `<span class="table-count"><i class="fas fa-table mr-0.5"></i>${t} (${rows.length})</span>`;
+            }
+            html += '</div>';
+            if (json.schema) html += `<div class="text-gray-400 text-[11px] mt-0.5">${json.schema} v${json.version || '1.0'}</div>`;
+            previewContent.innerHTML = html;
+            importStatus.textContent = `Loaded: ${order.length} tables. Ready.`;
+            importBtn.disabled = false;
+          } catch (err) {
+            parsedJson = null;
+            dataPreview.classList.add('hidden');
+            importStatus.innerHTML = `<span class="text-red-400"><i class="fas fa-times"></i> Invalid JSON: ${err.message}</span>`;
+            importBtn.disabled = true;
+          }
+        };
+        reader.readAsText(file);
+      });
+
+      // ---------- Clock ----------
+      function updateClock() {
+        document.getElementById('footerTime').textContent = new Date().toLocaleTimeString();
+      }
+      setInterval(updateClock, 1000);
+      updateClock();
+
+      // ---------- Init ----------
+      async function init() {
+        try { await connectDB(); } catch (_) {}
+        runBtn.addEventListener('click', runSchema);
+        importBtn.addEventListener('click', importData);
+      }
+      init();
+
+    })();
+  </script>
+
+</body>
+</html>
